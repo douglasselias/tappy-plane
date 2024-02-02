@@ -47,6 +47,7 @@ int main() {
 
   Music helicopterSound = LoadMusicStream("assets/helicopter.mp3");
   Music bgm = LoadMusicStream("assets/bgm.ogg");
+  SetMusicVolume(bgm, 0.5);
   PlayMusicStream(bgm);
   PlayMusicStream(helicopterSound);
 
