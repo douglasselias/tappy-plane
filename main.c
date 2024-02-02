@@ -40,7 +40,17 @@ int main() {
   Texture2D gameOverText = LoadTexture("assets/textGameOver.png");
   Texture2D puff = LoadTexture("assets/puff.png");
 
-  Sound gameOverSound = LoadSound("game_over.ogg");
+  InitAudioDevice();
+  Sound gameOverSound = LoadSound("assets/game_over.ogg");
+  Sound jump_sound = LoadSound("assets/jump.wav");
+  Sound score_sound = LoadSound("assets/score.wav");
+
+  Music helicopterSound = LoadMusicStream("assets/helicopter.mp3");
+  Music bgm = LoadMusicStream("assets/bgm.ogg");
+  PlayMusicStream(bgm);
+  PlayMusicStream(helicopterSound);
+
+  bool played_game_over_sound = false;
 
   float puff_timeout = 0;
 
@@ -116,24 +126,35 @@ int main() {
     float dt = GetFrameTime();
     float impulse = 0;
 
-    if (IsKeyPressed(KEY_J))
-      is_started = false;
+    if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(0))) {
+      if (game_over) {
+        played_game_over_sound = false;
+        game_over = false;
+        is_started = false;
+        plane_rotation = 0;
+        plane_velocity = 0;
+        plane_position.y = half_screen_height - (plane.height / 2.0);
+        score = 0;
+        obstacle_x = screen_width;
+        PlayMusicStream(bgm);
+        PlayMusicStream(helicopterSound);
+      } else {
+        if (!is_started)
+          is_started = true;
+        puff_timeout = 30;
+        impulse = -(gravity * 0.5);
+        plane_velocity = impulse;
+        PlaySound(jump_sound);
 
-    if (IsKeyPressed(KEY_F))
-      game_over = false;
-
-    if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(0)) {
-      if (!is_started)
-        is_started = true;
-      puff_timeout = 30;
-      impulse = -(gravity * 0.5);
-      plane_velocity = impulse;
-
-      if (puff_timeout > 0) {
-        puff_position.x = half_screen_width - 190;
-        puff_position.y = plane_position.y - 30;
+        if (puff_timeout > 0) {
+          puff_position.x = half_screen_width - 190;
+          puff_position.y = plane_position.y - 30;
+        }
       }
     }
+
+    UpdateMusicStream(bgm);
+    UpdateMusicStream(helicopterSound);
 
     if (is_started) {
       plane_velocity += gravity * dt;
@@ -181,10 +202,16 @@ int main() {
       game_over = true;
     }
 
-    PlaySound(gameOverSound);
+    if (game_over && !played_game_over_sound) {
+      StopMusicStream(bgm);
+      StopMusicStream(helicopterSound);
+      PlaySound(gameOverSound);
+      played_game_over_sound = true;
+    }
 
     if (CheckCollisionRecs(plane_collider, score_collider)) {
-      if (!scored_last_frame) {
+      if (!scored_last_frame && !game_over) {
+        PlaySound(score_sound);
         score++;
         scored_last_frame = true;
       }
