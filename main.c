@@ -14,6 +14,7 @@ typedef struct {
 typedef struct {
   Texture2D texture;
   float scale;
+  Rectangle collider;
 } Obstacle;
 
 typedef struct {
@@ -40,6 +41,18 @@ typedef struct {
   Vector2 position;
   int timeout;
 } Puff;
+
+typedef struct {
+  Texture2D texture;
+  Music music;
+} Bg;
+
+typedef enum {
+  intro,
+  playing,
+  gameover,
+} GameState;
+
 void draw_single_texture(Texture2D texture, Rectangle dest) {
   DrawTexturePro(texture, (Rectangle){0, 0, texture.width, texture.height},
                  dest, (Vector2){0, 0}, 0, WHITE);
@@ -70,33 +83,41 @@ int main() {
     number_textures[i] = LoadTexture(filename);
   }
 
-  Texture2D background = LoadTexture("assets/background.png");
-  Music bgm = LoadMusicStream("assets/bgm.ogg");
-  SetMusicVolume(bgm, 0.5);
-  PlayMusicStream(bgm);
+  Bg bg = {
+      .texture = LoadTexture("assets/background.png"),
+      .music = LoadMusicStream("assets/bgm.ogg"),
+  };
+  SetMusicVolume(bg.music, 0.5);
+  PlayMusicStream(bg.music);
 
-  Texture2D ceiling = LoadTexture("assets/ceiling.png");
-  Texture2D ground = LoadTexture("assets/ground.png");
+  Obstacle ceiling_obstacle = {
+      .texture = LoadTexture("assets/ceiling.png"),
+      .collider =
+          {
+              0,
+              0,
+              screen_width,
+              ceiling_obstacle.texture.height,
+          },
+  };
+
+  Obstacle ground_obstacle = {
+      .texture = LoadTexture("assets/ground.png"),
+      .collider =
+          {
+              0,
+              screen_height - ground_obstacle.texture.height,
+              screen_width,
+              ground_obstacle.texture.height,
+          },
+  };
+
   float on_screen_ground_x = 0;
-  float off_screen_ground_x = ceiling.width;
-  Rectangle ground_collider = {
-      0,
-      screen_height - ground.height,
-      screen_width,
-      ground.height,
-  };
-  Rectangle ceiling_collider = {
-      0,
-      0,
-      screen_width,
-      ground.height,
-  };
+  float off_screen_ground_x = ceiling_obstacle.texture.width;
 
   float gravity = 1000;
-  bool show_colliders = false;
-  /// @todo: ugly hack!
+  bool show_colliders = true;
   bool scored_last_frame = false;
-  /// @end_todo: ugly hack!
 
   /// @todo: add a button to click for restarting
 
@@ -105,8 +126,7 @@ int main() {
       .sound = LoadSound("assets/game_over.ogg"),
   };
 
-  bool is_game_over = false;
-  bool is_started = false;
+  GameState game_state = intro;
 
   Puff puff = {
       .texture = LoadTexture("assets/puff.png"),
@@ -152,60 +172,62 @@ int main() {
   Obstacle top_obstacle = {
       .texture = LoadTexture("assets/rockDown.png"),
       .scale = GetRandomValue(5, 20) / 10.0,
+      .collider =
+          {
+              obstacle_pos_x,
+              0,
+              10,
+              top_obstacle.texture.height,
+          },
   };
   Obstacle bottom_obstacle = {
       .texture = LoadTexture("assets/rock.png"),
       .scale = (2 - top_obstacle.scale) + 0.5,
-  };
-
-  Rectangle top_obstacle_collider = {
-      obstacle_pos_x,
-      0,
-      10,
-      top_obstacle.texture.height,
-  };
-  Rectangle bottom_obstacle_collider = {
-      obstacle_pos_x,
-      screen_height - (bottom_obstacle.texture.height * bottom_obstacle.scale),
-      10,
-      bottom_obstacle.texture.height,
+      .collider =
+          {
+              obstacle_pos_x,
+              screen_height -
+                  (bottom_obstacle.texture.height * bottom_obstacle.scale),
+              10,
+              bottom_obstacle.texture.height,
+          },
   };
 
   while (!WindowShouldClose()) {
     float dt = GetFrameTime();
 
     if (IsMouseButtonPressed(0)) {
-      if (is_game_over) {
-        is_game_over = false;
-        is_started = false;
+      switch (game_state) {
+      case intro: {
+        game_state = playing;
+      }
+      case playing: {
+        plane.velocity = -(gravity * 0.5);
+        PlaySound(plane.jump);
+
+        puff.position.x = half_screen_width - 190;
+        puff.position.y = plane.position.y - 30;
+        puff.timeout = 30;
+        break;
+      }
+      case gameover: {
+        game_state = intro;
         plane.rotation = 0;
         plane.velocity = 0;
         plane.position.y = half_screen_height - (plane.texture.height / 2.0);
         score.value = 0;
         obstacle_pos_x = screen_width;
-        // score.collider.x = screen_width;
-        PlayMusicStream(bgm);
+        PlayMusicStream(bg.music);
         PlayMusicStream(plane.helix);
-      } else {
-        if (!is_started)
-          is_started = true;
-
-        plane.velocity = -(gravity * 0.5);
-        PlaySound(plane.jump);
-
-        /// @todo: hmmm
-        puff.timeout = 30;
-        if (puff.timeout > 0) {
-          puff.position.x = half_screen_width - 190;
-          puff.position.y = plane.position.y - 30;
-        }
+        break;
+      }
       }
     }
 
-    UpdateMusicStream(bgm);
+    UpdateMusicStream(bg.music);
     UpdateMusicStream(plane.helix);
 
-    if (is_started) {
+    if (game_state == playing) {
       plane.velocity += gravity * dt;
       plane.position.y += plane.velocity * dt;
     }
@@ -216,7 +238,7 @@ int main() {
       plane.rotation = 45;
     }
 
-    if (is_started)
+    if (game_state == playing)
       obstacle_pos_x -= 3;
     if (obstacle_pos_x < -bottom_obstacle.texture.width) {
       obstacle_pos_x = screen_width;
@@ -224,30 +246,30 @@ int main() {
       bottom_obstacle.scale = (2 - top_obstacle.scale) + 0.5;
     }
 
-    top_obstacle_collider.x =
+    top_obstacle.collider.x =
         obstacle_pos_x + (bottom_obstacle.texture.width / 2.0);
-    top_obstacle_collider.height =
+    top_obstacle.collider.height =
         top_obstacle.texture.height * top_obstacle.scale;
 
-    bottom_obstacle_collider.x =
+    bottom_obstacle.collider.x =
         obstacle_pos_x + (bottom_obstacle.texture.width / 2.0);
-    bottom_obstacle_collider.y =
+    bottom_obstacle.collider.y =
         screen_height -
         (bottom_obstacle.texture.height * bottom_obstacle.scale),
-    bottom_obstacle_collider.height =
+    bottom_obstacle.collider.height =
         bottom_obstacle.texture.height * bottom_obstacle.scale;
 
     Rectangle plane_collider = {plane.position.x - (plane.texture.width / 2.0),
                                 plane.position.y - (plane.texture.height / 2.0),
                                 plane.texture.width, plane.texture.height};
 
-    if (!is_game_over) {
-      if (CheckCollisionRecs(plane_collider, top_obstacle_collider) ||
-          CheckCollisionRecs(plane_collider, bottom_obstacle_collider) ||
-          CheckCollisionRecs(plane_collider, ground_collider) ||
-          CheckCollisionRecs(plane_collider, ceiling_collider)) {
-        is_game_over = true;
-        StopMusicStream(bgm);
+    if (game_state == playing) {
+      if (CheckCollisionRecs(plane_collider, top_obstacle.collider) ||
+          CheckCollisionRecs(plane_collider, bottom_obstacle.collider) ||
+          CheckCollisionRecs(plane_collider, ground_obstacle.collider) ||
+          CheckCollisionRecs(plane_collider, ceiling_obstacle.collider)) {
+        game_state = gameover;
+        StopMusicStream(bg.music);
         StopMusicStream(plane.helix);
         PlaySound(game_over.sound);
       }
@@ -256,7 +278,7 @@ int main() {
     score.collider.x = obstacle_pos_x + bottom_obstacle.texture.width;
 
     if (CheckCollisionRecs(plane_collider, score.collider)) {
-      if (!scored_last_frame && !is_game_over) {
+      if (!scored_last_frame && game_state == playing) {
         PlaySound(score.sound);
         score.value++;
         scored_last_frame = true;
@@ -273,12 +295,12 @@ int main() {
     }
 
     on_screen_ground_x -= 3;
-    if (on_screen_ground_x < -ceiling.width) {
-      on_screen_ground_x = ceiling.width;
+    if (on_screen_ground_x < -ceiling_obstacle.texture.width) {
+      on_screen_ground_x = ceiling_obstacle.texture.width;
     }
     off_screen_ground_x -= 3;
-    if (off_screen_ground_x < -ceiling.width) {
-      off_screen_ground_x = ceiling.width;
+    if (off_screen_ground_x < -ceiling_obstacle.texture.width) {
+      off_screen_ground_x = ceiling_obstacle.texture.width;
     }
 
     plane.animation_frame++;
@@ -315,7 +337,7 @@ int main() {
     BeginDrawing();
     ClearBackground(RAYWHITE);
 
-    draw_single_texture(background,
+    draw_single_texture(bg.texture,
                         (Rectangle){0, 0, screen_width, screen_height});
 
     draw_single_texture(
@@ -332,17 +354,27 @@ int main() {
                     bottom_obstacle.texture.width,
                     bottom_obstacle.texture.height * bottom_obstacle.scale});
 
-    draw_single_texture(ground, (Rectangle){on_screen_ground_x,
-                                            screen_height - ground.height + 20,
-                                            ground.width + 2, ground.height});
-    draw_single_texture(ceiling, (Rectangle){on_screen_ground_x, -20,
-                                             ground.width + 2, ground.height});
+    draw_single_texture(
+        ground_obstacle.texture,
+        (Rectangle){on_screen_ground_x,
+                    screen_height - ground_obstacle.texture.height + 20,
+                    ground_obstacle.texture.width + 2,
+                    ground_obstacle.texture.height});
+    draw_single_texture(ceiling_obstacle.texture,
+                        (Rectangle){on_screen_ground_x, -20,
+                                    ground_obstacle.texture.width + 2,
+                                    ground_obstacle.texture.height});
 
-    draw_single_texture(ground, (Rectangle){off_screen_ground_x,
-                                            screen_height - ground.height + 20,
-                                            ground.width + 2, ground.height});
-    draw_single_texture(ceiling, (Rectangle){off_screen_ground_x, -20,
-                                             ground.width + 2, ground.height});
+    draw_single_texture(
+        ground_obstacle.texture,
+        (Rectangle){off_screen_ground_x,
+                    screen_height - ground_obstacle.texture.height + 20,
+                    ground_obstacle.texture.width + 2,
+                    ground_obstacle.texture.height});
+    draw_single_texture(ceiling_obstacle.texture,
+                        (Rectangle){off_screen_ground_x, -20,
+                                    ground_obstacle.texture.width + 2,
+                                    ground_obstacle.texture.height});
 
     if (score.value < 10) {
       DrawTexture(score.texture_ones, half_screen_width, 50, WHITE);
@@ -373,7 +405,7 @@ int main() {
         (Vector2){plane.texture.width / 2.0, plane.texture.height / 2.0},
         plane.rotation, WHITE);
 
-    if (!is_started) {
+    if (game_state == intro) {
       float pos_x = plane.position.x + (plane.texture.width / 2.0) + 10;
       float pos_y = plane.position.y - (hand.texture.height / 2.0) + 5;
       if (!is_hand_action) {
@@ -388,13 +420,13 @@ int main() {
       Color color = MAGENTA;
       DrawRectangleLinesEx(plane_collider, thickness, color);
       DrawRectangleLinesEx(score.collider, thickness, color);
-      DrawRectangleLinesEx(ceiling_collider, thickness, color);
-      DrawRectangleLinesEx(ground_collider, thickness, color);
-      DrawRectangleLinesEx(top_obstacle_collider, thickness, color);
-      DrawRectangleLinesEx(bottom_obstacle_collider, thickness, color);
+      DrawRectangleLinesEx(ceiling_obstacle.collider, thickness, color);
+      DrawRectangleLinesEx(ground_obstacle.collider, thickness, color);
+      DrawRectangleLinesEx(top_obstacle.collider, thickness, color);
+      DrawRectangleLinesEx(bottom_obstacle.collider, thickness, color);
     }
 
-    if (is_game_over) {
+    if (game_state == gameover) {
       DrawTexture(game_over.texture,
                   half_screen_width - (game_over.texture.width / 2.0),
                   half_screen_height - (game_over.texture.height / 2.0), WHITE);
