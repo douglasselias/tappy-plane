@@ -116,10 +116,8 @@ int main() {
   float off_screen_ground_x = ceiling_obstacle.texture.width;
 
   float gravity = 1000;
-  bool show_colliders = true;
+  bool show_colliders = false;
   bool scored_last_frame = false;
-
-  /// @todo: add a button to click for restarting
 
   GameOver game_over = {
       .texture = LoadTexture("assets/textGameOver.png"),
@@ -227,7 +225,7 @@ int main() {
     UpdateMusicStream(bg.music);
     UpdateMusicStream(plane.helix);
 
-    if (game_state == playing) {
+    if (game_state != intro) {
       plane.velocity += gravity * dt;
       plane.position.y += plane.velocity * dt;
     }
@@ -238,7 +236,7 @@ int main() {
       plane.rotation = 45;
     }
 
-    if (game_state == playing)
+    if (game_state != intro)
       obstacle_pos_x -= 3;
     if (obstacle_pos_x < -bottom_obstacle.texture.width) {
       obstacle_pos_x = screen_width;
@@ -377,7 +375,9 @@ int main() {
                                     ground_obstacle.texture.height});
 
     if (score.value < 10) {
-      DrawTexture(score.texture_ones, half_screen_width, 50, WHITE);
+      DrawTexture(score.texture_ones,
+                  half_screen_width - (score.texture_ones.width / 2.0), 50,
+                  WHITE);
     } else if (score.value < 100) {
       DrawTexture(score.texture_tens,
                   half_screen_width - (score.texture_tens.width / 2.0) + 6, 50,
